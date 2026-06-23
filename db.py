@@ -63,3 +63,10 @@ def update_status(row_id: int, status: str, whatsapp_sid: str = None, db=None):
             "UPDATE reviews SET status=?, whatsapp_sid=? WHERE id=?",
             (status, whatsapp_sid, row_id)
         )
+
+def log_reply(row_id: int, reply_text: str, status: str = "replied", db=None):
+    with conn(db) as c:
+        c.execute(
+            "UPDATE reviews SET reply_text=?, status=? WHERE id=?",
+            (reply_text, status, row_id)
+        )

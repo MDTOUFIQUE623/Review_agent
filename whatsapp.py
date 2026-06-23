@@ -40,3 +40,12 @@ if __name__ == "__main__":
     phone = sys.argv[1] if len(sys.argv) > 1 else input("Test phone (e.g. +919876543210): ")
     sid = send_review_request("Test User", phone, "Test Business", "AC Repair")
     print(f"OK — message SID: {sid}")
+
+def send_raw(to_phone: str, message: str) -> str:
+    """Send any plain message — used for owner alerts."""
+    msg = _get_client().messages.create(
+        from_=os.getenv("TWILIO_WHATSAPP_FROM"),
+        to=f"whatsapp:{to_phone}",
+        body=message,
+    )
+    return msg.sid

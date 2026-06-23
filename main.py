@@ -4,10 +4,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 import db
 import whatsapp
+import webhook
+import scheduler
 
 load_dotenv()
 
 app = FastAPI()
+app.include_router(webhook.router)
 
 HERE = Path(__file__).parent
 
@@ -20,6 +23,7 @@ def render(filename: str, **replacements) -> str:
 @app.on_event("startup")
 def startup():
     db.init()
+    scheduler.start()  # background scheduler, runs inside this process
 
 # ── Trigger form ──────────────────────────────────────────────────────────────
 
@@ -40,7 +44,7 @@ def submit(
         db.update_status(row_id, "sent", whatsapp_sid=sid)
     except Exception as e:
         db.update_status(row_id, "send_failed")
-        print(f"WhatsApp error: {e}")  # visible in uvicorn logs
+        print(f"[submit] WhatsApp error: {e}")
     return RedirectResponse(url=f"/dashboard?new={row_id}", status_code=303)
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
