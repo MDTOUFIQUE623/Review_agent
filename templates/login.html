@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReviewAgent — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #0F1729; --indigo: #6366F1; --border: #E2E8F0;
+    --slate: #64748B; --canvas: #F1F5F9; --white: #FFFFFF;
+  }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--navy);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .wrap { width: 100%; max-width: 380px; }
+  .brand { text-align: center; margin-bottom: 36px; }
+  .brand-mark { font-size: 1.5rem; font-weight: 700; color: #F8FAFC; letter-spacing: -.03em; }
+  .brand-mark span { color: var(--indigo); }
+  .brand-sub { font-size: .8rem; color: #64748B; margin-top: 4px; letter-spacing: .05em; text-transform: uppercase; }
+  .card { background: var(--white); border-radius: 16px; padding: 32px; }
+  .card-title { font-size: 1.1rem; font-weight: 700; color: #0F172A; margin-bottom: 6px; }
+  .card-sub { font-size: .85rem; color: var(--slate); margin-bottom: 28px; }
+  label { display: block; font-size: .75rem; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; margin-top: 18px; }
+  label:first-of-type { margin-top: 0; }
+  input {
+    width: 100%; padding: 11px 14px; border: 1.5px solid var(--border);
+    border-radius: 9px; font-size: .9rem; font-family: inherit; color: #0F172A;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px #6366F118; }
+  .error {
+    background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B;
+    border-radius: 8px; padding: 10px 14px; font-size: .83rem;
+    margin-bottom: 20px; display: {{ error_display }};
+  }
+  .btn {
+    width: 100%; padding: 12px; margin-top: 24px;
+    background: var(--indigo); color: white; border: none;
+    border-radius: 9px; font-size: .95rem; font-weight: 600;
+    font-family: inherit; cursor: pointer; transition: opacity .15s;
+  }
+  .btn:hover { opacity: .88; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="brand-mark">Review<span>Agent</span></div>
+    <div class="brand-sub">Operator Dashboard</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Sign in</div>
+    <div class="card-sub">Enter your credentials to continue</div>
+
+    <div class="error">{{ error_msg }}</div>
+
+    <form method="POST" action="/login">
+      <label>Username</label>
+      <input name="username" type="text" autocomplete="username" autofocus required>
+
+      <label>Password</label>
+      <input name="password" type="password" autocomplete="current-password" required>
+
+      <button type="submit" class="btn">Sign in →</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

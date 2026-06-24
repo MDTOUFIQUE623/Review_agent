@@ -3,55 +3,108 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Manage Businesses</title>
+<title>ReviewAgent — Businesses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, sans-serif; background: #f5f5f5; padding: 32px 24px; }
-  .top { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
-  h1 { font-size: 1.4rem; color: #111; flex: 1; }
-  a.btn { padding: 8px 16px; background: #4f46e5; color: white; border-radius: 8px; text-decoration: none; font-size: .9rem; }
-  table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 32px; }
-  th { background: #f9f9f9; padding: 12px 16px; text-align: left; font-size: .8rem; color: #666; text-transform: uppercase; letter-spacing: .04em; }
-  td { padding: 12px 16px; font-size: .9rem; color: #333; border-top: 1px solid #f0f0f0; }
-  .card { background: white; border-radius: 12px; padding: 28px; max-width: 520px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
-  .card h2 { font-size: 1.1rem; margin-bottom: 20px; color: #111; }
-  label { display: block; font-size: .85rem; font-weight: 600; color: #444; margin-bottom: 6px; margin-top: 16px; }
-  input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; }
-  input:focus { outline: none; border-color: #4f46e5; }
-  button { margin-top: 24px; padding: 10px 24px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-size: .95rem; font-weight: 600; cursor: pointer; }
-  button:hover { background: #4338ca; }
-  small { display: block; margin-top: 4px; color: #888; font-size: .78rem; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #0F1729; --navy-2: #1A2540; --navy-3: #243352;
+    --indigo: #6366F1; --indigo-dim: #4F46E520;
+    --text: #F8FAFC; --text-dim: #94A3B8;
+    --canvas: #F1F5F9; --white: #FFFFFF; --border: #E2E8F0; --slate: #64748B;
+  }
+  body { font-family: 'Inter', sans-serif; background: var(--canvas); display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; min-height: 100vh; background: var(--navy); display: flex; flex-direction: column; padding: 24px 0; flex-shrink: 0; position: fixed; top: 0; left: 0; bottom: 0; }
+  .logo { padding: 0 20px 28px; border-bottom: 1px solid var(--navy-3); }
+  .logo-mark { font-size: 1.1rem; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+  .logo-mark span { color: var(--indigo); }
+  .logo-sub { font-size: .7rem; color: var(--text-dim); margin-top: 2px; letter-spacing: .04em; text-transform: uppercase; }
+  nav { padding: 16px 12px; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; color: var(--text-dim); font-size: .875rem; font-weight: 500; text-decoration: none; margin-bottom: 2px; transition: background .15s, color .15s; }
+  .nav-item:hover { background: var(--navy-2); color: var(--text); }
+  .nav-item.active { background: var(--indigo-dim); color: var(--indigo); }
+  .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+  .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--navy-3); }
+  .sidebar-footer p { font-size: .72rem; color: var(--text-dim); }
+  .main { margin-left: 220px; flex: 1; padding: 32px 36px; }
+  .page-header { margin-bottom: 28px; }
+  .page-title { font-size: 1.5rem; font-weight: 700; color: #0F172A; letter-spacing: -.02em; }
+  .page-sub { font-size: .875rem; color: var(--slate); margin-top: 3px; }
+  .grid { display: grid; grid-template-columns: 1fr 380px; gap: 24px; align-items: start; }
+  .table-wrap { background: var(--white); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: #F8FAFC; padding: 11px 16px; text-align: left; font-size: .72rem; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); }
+  tbody td { padding: 13px 16px; font-size: .875rem; color: #334155; border-bottom: 1px solid #F1F5F9; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #F8FAFC; }
+  .biz-name { font-weight: 600; color: #0F172A; }
+  .place-id { font-size: .75rem; color: var(--slate); font-variant-numeric: tabular-nums; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card { background: var(--white); border-radius: 12px; border: 1px solid var(--border); padding: 24px; }
+  .card-title { font-size: 1rem; font-weight: 700; color: #0F172A; margin-bottom: 20px; }
+  label { display: block; font-size: .78rem; font-weight: 600; color: var(--slate); margin-bottom: 5px; margin-top: 16px; text-transform: uppercase; letter-spacing: .04em; }
+  label:first-of-type { margin-top: 0; }
+  input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: .875rem; font-family: inherit; color: #0F172A; }
+  input:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px #6366F120; }
+  .hint { font-size: .72rem; color: var(--slate); margin-top: 4px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; background: var(--indigo); color: white; border-radius: 8px; font-size: .875rem; font-weight: 600; border: none; cursor: pointer; margin-top: 20px; width: 100%; justify-content: center; transition: opacity .15s; }
+  .btn:hover { opacity: .88; }
+  .empty { padding: 48px 24px; text-align: center; color: var(--slate); font-size: .9rem; }
 </style>
 </head>
 <body>
-<div class="top">
-  <h1>🏢 Manage Businesses</h1>
-  <a class="btn" href="/dashboard">← Dashboard</a>
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">Review<span>Agent</span></div>
+    <div class="logo-sub">Operator Dashboard</div>
+  </div>
+  <nav>
+    <a href="/dashboard" class="nav-item"><span class="nav-icon">📊</span> Dashboard</a>
+    <a href="/businesses" class="nav-item active"><span class="nav-icon">🏢</span> Businesses</a>
+    <a href="/" class="nav-item"><span class="nav-icon">✅</span> Log Job</a>
+  </nav>
+  <div class="sidebar-footer">
+    <a href="/logout" style="color:#94A3B8;text-decoration:none;">
+        Sign Out
+    </a>
+    <p>ReviewAgent v1</p>
 </div>
+</aside>
 
-<table>
-  <thead>
-    <tr><th>#</th><th>Name</th><th>Owner Phone</th><th>Place ID</th><th>Added</th></tr>
-  </thead>
-  <tbody>{{ rows }}</tbody>
-</table>
+<main class="main">
+  <div class="page-header">
+    <div class="page-title">Businesses</div>
+    <div class="page-sub">Manage your client accounts</div>
+  </div>
 
-<div class="card">
-  <h2>Add New Business</h2>
-  <form method="POST" action="/businesses/add">
-    <label>Business Name</label>
-    <input name="name" placeholder="Cafe Blue" required>
+  <div class="grid">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Business</th><th>Owner Phone</th><th>Place ID</th><th>Added</th></tr>
+        </thead>
+        <tbody>{{ rows }}</tbody>
+      </table>
+    </div>
 
-    <label>Owner Phone (WhatsApp)</label>
-    <input name="owner_phone" placeholder="+919876543210" required>
-    <small>Complaint alerts will be sent here</small>
+    <div class="card">
+      <div class="card-title">Add New Client</div>
+      <form method="POST" action="/businesses/add">
+        <label>Business Name</label>
+        <input name="name" placeholder="Cafe Blue" required>
 
-    <label>Google Place ID</label>
-    <input name="google_place_id" placeholder="ChIJgUbEo8cfqokR5lP9_Wh_DaM" required>
-    <small>Find it at developers.google.com/maps/documentation/places/web-service/place-id</small>
+        <label>Owner WhatsApp</label>
+        <input name="owner_phone" placeholder="+919876543210" required>
+        <div class="hint">Complaint alerts go here</div>
 
-    <button type="submit">Add Business</button>
-  </form>
-</div>
+        <label>Google Place ID</label>
+        <input name="google_place_id" placeholder="ChIJgUbEo8cfqokR5..." required>
+        <div class="hint">Find at developers.google.com/maps/documentation/places/web-service/place-id</div>
+
+        <button type="submit" class="btn">Add Business →</button>
+      </form>
+    </div>
+  </div>
+</main>
 </body>
 </html>
