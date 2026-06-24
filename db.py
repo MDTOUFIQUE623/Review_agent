@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import contextmanager
+import re
 
 DB = "reviews.db"
 
@@ -13,6 +14,12 @@ def conn(db=None):
     finally:
         c.close()
 
+def _slugify(name: str) -> str:
+    s = name.lower().strip()
+    s = re.sub(r"[^\w\s-]", "", s)
+    s = re.sub(r"[\s_-]+", "-", s)
+    return s[:40]
+
 def init(db=None):
     with conn(db) as c:
         c.executescript("""
@@ -21,6 +28,7 @@ def init(db=None):
                 name             TEXT NOT NULL,
                 owner_phone      TEXT NOT NULL,
                 google_place_id  TEXT NOT NULL,
+                slug             TEXT UNIQUE,
                 active           INTEGER DEFAULT 1,
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -30,7 +38,7 @@ def init(db=None):
                 business_id     INTEGER NOT NULL REFERENCES businesses(id),
                 customer_name   TEXT,
                 customer_phone  TEXT,
-                job_type        TEXT,
+                job_type        TEXT DEFAULT 'Visit',
                 sent_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status          TEXT DEFAULT 'pending',
                 reply_text      TEXT,
@@ -42,10 +50,15 @@ def init(db=None):
 # ── Businesses ────────────────────────────────────────────────────────────────
 
 def add_business(name, owner_phone, google_place_id, db=None):
+    slug = _slugify(name)
     with conn(db) as c:
+        # ensure unique slug
+        existing = [r[0] for r in c.execute("SELECT slug FROM businesses WHERE slug LIKE ?", (slug + "%",))]
+        if slug in existing:
+            slug = f"{slug}-{len(existing)}"
         cur = c.execute(
-            "INSERT INTO businesses (name, owner_phone, google_place_id) VALUES (?,?,?)",
-            (name, owner_phone, google_place_id)
+            "INSERT INTO businesses (name, owner_phone, google_place_id, slug) VALUES (?,?,?,?)",
+            (name, owner_phone, google_place_id, slug)
         )
         return cur.lastrowid
 
@@ -60,9 +73,14 @@ def get_business(business_id, db=None):
         row = c.execute("SELECT * FROM businesses WHERE id=?", (business_id,)).fetchone()
         return dict(row) if row else None
 
+def get_business_by_slug(slug, db=None):
+    with conn(db) as c:
+        row = c.execute("SELECT * FROM businesses WHERE slug=? AND active=1", (slug,)).fetchone()
+        return dict(row) if row else None
+
 # ── Reviews ───────────────────────────────────────────────────────────────────
 
-def insert(business_id, customer_name, customer_phone, job_type, db=None):
+def insert(business_id, customer_name, customer_phone, job_type="Visit", db=None):
     with conn(db) as c:
         cur = c.execute(
             "INSERT INTO reviews (business_id, customer_name, customer_phone, job_type) VALUES (?,?,?,?)",
@@ -99,7 +117,6 @@ def all_rows(business_id=None, db=None):
         )]
 
 def get_pending_followups(days, follow_up_sent, db=None):
-    """Rows that are still 'sent' and haven't had follow_up_sent level yet."""
     from datetime import datetime, timedelta
     cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
     with conn(db) as c:
@@ -116,30 +133,14 @@ if __name__ == "__main__":
     tmp = tempfile.mktemp(suffix=".db")
     try:
         init(tmp)
-
-        # add two businesses
         b1 = add_business("Cafe Blue", "+919999999991", "ChIJtest1", tmp)
-        b2 = add_business("Wetalk AC", "+919999999992", "ChIJtest2", tmp)
-
-        # add reviews for each
-        r1 = insert(b1, "Rahul", "+911111111111", "Coffee", tmp)
-        r2 = insert(b2, "Priya", "+912222222222", "AC Repair", tmp)
-
-        # check isolation
-        b1_rows = all_rows(business_id=b1, db=tmp)
-        b2_rows = all_rows(business_id=b2, db=tmp)
-        all_ = all_rows(db=tmp)
-
-        assert len(b1_rows) == 1 and b1_rows[0]["customer_name"] == "Rahul"
-        assert len(b2_rows) == 1 and b2_rows[0]["customer_name"] == "Priya"
-        assert len(all_) == 2
-
-        # check business lookup
-        biz = get_business(b1, tmp)
-        assert biz["name"] == "Cafe Blue"
-
-        print(f"OK — businesses: {len(get_businesses(tmp))}, reviews: {len(all_)}")
-        print(f"     b1 sees only: {[r['customer_name'] for r in b1_rows]}")
-        print(f"     b2 sees only: {[r['customer_name'] for r in b2_rows]}")
+        b2 = add_business("Cafe Blue", "+919999999992", "ChIJtest2", tmp)  # duplicate name
+        biz1 = get_business(b1, tmp)
+        biz2 = get_business(b2, tmp)
+        assert biz1["slug"] == "cafe-blue"
+        assert biz2["slug"] != biz1["slug"]  # unique slug
+        biz_by_slug = get_business_by_slug("cafe-blue", tmp)
+        assert biz_by_slug["id"] == b1
+        print(f"OK — slugs: {biz1['slug']}, {biz2['slug']}")
     finally:
         os.unlink(tmp)

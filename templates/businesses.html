@@ -49,6 +49,8 @@
   .hint { font-size: .72rem; color: var(--slate); margin-top: 4px; }
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; background: var(--indigo); color: white; border-radius: 8px; font-size: .875rem; font-weight: 600; border: none; cursor: pointer; margin-top: 20px; width: 100%; justify-content: center; transition: opacity .15s; }
   .btn:hover { opacity: .88; }
+  .btn-sm { display:inline-block; padding: 4px 10px; background: var(--indigo); color: white; border-radius: 6px; text-decoration: none; font-size: .75rem; font-weight: 600; }
+  code { font-size: .72rem; color: var(--slate); background: #F1F5F9; padding: 2px 6px; border-radius: 4px; }
   .empty { padding: 48px 24px; text-align: center; color: var(--slate); font-size: .9rem; }
 </style>
 </head>
@@ -63,12 +65,7 @@
     <a href="/businesses" class="nav-item active"><span class="nav-icon">🏢</span> Businesses</a>
     <a href="/" class="nav-item"><span class="nav-icon">✅</span> Log Job</a>
   </nav>
-  <div class="sidebar-footer">
-    <a href="/logout" style="color:#94A3B8;text-decoration:none;">
-        Sign Out
-    </a>
-    <p>ReviewAgent v1</p>
-</div>
+  <div class="sidebar-footer"><p>ReviewAgent v1</p><a href="/logout" style="display:block;margin-top:10px;font-size:.78rem;color:#64748B;text-decoration:none;">Sign out</a></div>
 </aside>
 
 <main class="main">
@@ -81,7 +78,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>#</th><th>Business</th><th>Owner Phone</th><th>Place ID</th><th>Added</th></tr>
+          <tr><th>#</th><th>Business</th><th>Owner Phone</th><th>Landing URL</th><th>QR</th><th>Added</th></tr>
         </thead>
         <tbody>{{ rows }}</tbody>
       </table>

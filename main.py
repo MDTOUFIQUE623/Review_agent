@@ -1,10 +1,11 @@
 from fastapi import FastAPI, Form, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pathlib import Path
 from dotenv import load_dotenv
 from html import escape
 from itsdangerous import URLSafeTimedSerializer, BadSignature
-import re, os
+import re, os, io
 import db, whatsapp, webhook, scheduler
 
 load_dotenv()
@@ -15,17 +16,16 @@ app.include_router(webhook.router)
 HERE = Path(__file__).parent
 PHONE_RE = re.compile(r"^\+\d{10,15}$")
 
-# ── Session helpers ───────────────────────────────────────────────────────────
+# ── Session ───────────────────────────────────────────────────────────────────
 
 def _signer():
-    secret = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
-    return URLSafeTimedSerializer(secret)
+    return URLSafeTimedSerializer(os.getenv("SECRET_KEY", "dev-secret-change-in-prod"))
 
-def set_session(response, username: str):
+def set_session(response, username):
     token = _signer().dumps(username)
     response.set_cookie("session", token, httponly=True, samesite="lax", max_age=60*60*8)
 
-def get_session(request: Request) -> str | None:
+def get_session(request: Request):
     token = request.cookies.get("session")
     if not token:
         return None
@@ -49,7 +49,7 @@ def startup():
     db.init()
     scheduler.start()
 
-# ── Render helper ─────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def render(filename, **kw):
     html = (HERE / "templates" / filename).read_text(encoding="utf-8")
@@ -85,7 +85,53 @@ def logout():
     response.delete_cookie("session")
     return response
 
-# ── Trigger form ──────────────────────────────────────────────────────────────
+# ── Public QR landing page ────────────────────────────────────────────────────
+
+@app.get("/r/{slug}", response_class=HTMLResponse)
+def qr_landing(slug: str):
+    biz = db.get_business_by_slug(slug)
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+    return render("landing.html", business_name=e(biz["name"]), slug=e(slug))
+
+@app.post("/r/{slug}/submit")
+async def qr_submit(slug: str, customer_name: str = Form(...), customer_phone: str = Form(...)):
+    biz = db.get_business_by_slug(slug)
+    if not biz:
+        raise HTTPException(status_code=404, detail="Business not found")
+    if not PHONE_RE.match(customer_phone):
+        raise HTTPException(status_code=400, detail="Invalid phone number")
+    row_id = db.insert(biz["id"], customer_name, customer_phone, "Visit")
+    try:
+        sid = whatsapp.send_review_request(
+            customer_name, customer_phone,
+            biz["name"], "visit", biz["google_place_id"]
+        )
+        db.update_status(row_id, "sent", whatsapp_sid=sid)
+    except Exception as ex:
+        db.update_status(row_id, "send_failed")
+        print(f"[qr_submit] WhatsApp error: {ex}")
+    return JSONResponse({"ok": True})
+
+# ── QR code image download ────────────────────────────────────────────────────
+
+@app.get("/businesses/{business_id}/qr")
+def download_qr(business_id: int, _=Depends(require_auth)):
+    import qrcode
+    biz = db.get_business(business_id)
+    if not biz:
+        raise HTTPException(status_code=404)
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    url = f"{base_url}/r/{biz['slug']}"
+    img = qrcode.make(url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    filename = f"qr-{biz['slug']}.png"
+    return StreamingResponse(buf, media_type="image/png",
+        headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+# ── Trigger form (manual, kept for operator use) ──────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 def trigger_form(request: Request, _=Depends(require_auth)):
@@ -105,7 +151,7 @@ def submit(
     _=Depends(require_auth),
 ):
     if not PHONE_RE.match(customer_phone):
-        raise HTTPException(status_code=400, detail="Invalid phone. Use format: +919876543210")
+        raise HTTPException(status_code=400, detail="Invalid phone. Use: +919876543210")
     biz = db.get_business(business_id)
     if not biz:
         raise HTTPException(status_code=400, detail="Business not found")
@@ -126,14 +172,18 @@ def submit(
 @app.get("/businesses", response_class=HTMLResponse)
 def businesses_page(request: Request, _=Depends(require_auth)):
     rows = db.get_businesses()
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
     rows_html = "".join(
         f"<tr><td>{e(b['id'])}</td>"
         f"<td class='biz-name'>{e(b['name'])}</td>"
         f"<td>{e(b['owner_phone'])}</td>"
-        f"<td><span class='place-id'>{e(b['google_place_id'])}</span></td>"
+        f"<td><code>{base_url}/r/{e(b['slug'])}</code></td>"
+        f"<td>"
+        f"<a href='/businesses/{e(b['id'])}/qr' class='btn-sm'>⬇ QR</a>"
+        f"</td>"
         f"<td>{e(b['created_at'][:10])}</td></tr>"
         for b in rows
-    ) or "<tr><td colspan='5' class='empty'>No businesses yet. Add your first client →</td></tr>"
+    ) or "<tr><td colspan='6' class='empty'>No businesses yet. Add your first client →</td></tr>"
     return render("businesses.html", rows=rows_html)
 
 @app.post("/businesses/add")
@@ -145,14 +195,14 @@ def add_business(
     _=Depends(require_auth),
 ):
     if not PHONE_RE.match(owner_phone):
-        raise HTTPException(status_code=400, detail="Invalid phone. Use format: +919876543210")
+        raise HTTPException(status_code=400, detail="Invalid phone. Use: +919876543210")
     db.add_business(name, owner_phone, google_place_id)
     return RedirectResponse(url="/businesses", status_code=303)
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-
+from typing import Optional
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)):
+def dashboard(request: Request, business_id: Optional[int] = None, _=Depends(require_auth)):
     businesses = db.get_businesses()
     rows = db.all_rows(business_id=business_id)
 
@@ -165,6 +215,7 @@ def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)
         f'<option value="{e(b["id"])}" {"selected" if b["id"]==business_id else ""}>{e(b["name"])}</option>'
         for b in businesses
     )
+
     rows_html = "".join(
         f"<tr>"
         f"<td>{e(r['id'])}</td>"
@@ -172,10 +223,11 @@ def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)
         f"<td>{e(r['business_name'])}</td>"
         f"<td>{e(r['job_type'])}</td>"
         f"<td><span class='badge {e(r['status'])}'><span class='badge-dot'></span>{e(r['status']).replace('_',' ')}</span></td>"
+        f"<td class='reply-cell'>{('<span class=\"reply-text\">' + e(r['reply_text']) + '</span>') if r['reply_text'] else '<span class=\"no-reply\">—</span>'}</td>"
         f"<td>{e(r['sent_at'][:16])}</td>"
         f"</tr>"
         for r in rows
-    ) or "<tr><td colspan='6' class='empty'>No review requests yet. <a href='/'>Log your first job →</a></td></tr>"
+    ) or "<tr><td colspan='7' class='empty'>No review requests yet. <a href='/'>Log your first job →</a></td></tr>"
 
     return render("dashboard.html",
         filter_options=filter_options,

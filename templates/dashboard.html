@@ -102,6 +102,9 @@
     50% { opacity: .3; }
   }
 
+  .reply-text { font-size: .8rem; color: #334155; max-width: 200px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .no-reply { color: #CBD5E1; }
+  .reply-cell { max-width: 200px; }
   .empty { padding: 64px 24px; text-align: center; color: var(--slate); }
   .empty p { font-size: .95rem; margin-top: 8px; }
 </style>
@@ -119,9 +122,6 @@
     <a href="/" class="nav-item"><span class="nav-icon">✅</span> Log Job</a>
   </nav>
   <div class="sidebar-footer">
-    <a href="/logout" style="color:#94A3B8;text-decoration:none;">
-        Sign Out
-    </a>
     <p>ReviewAgent v1</p>
   </div>
 </aside>
@@ -166,7 +166,7 @@
     <table>
       <thead>
         <tr>
-          <th>#</th><th>Customer</th><th>Business</th><th>Job</th><th>Status</th><th>Sent At</th>
+          <th>#</th><th>Customer</th><th>Business</th><th>Job</th><th>Status</th><th>Reply</th><th>Sent At</th>
         </tr>
       </thead>
       <tbody>{{ rows }}</tbody>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leave a Review — {{ business_name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #0F1729 0%, #1e2d4d 100%);
+    min-height: 100vh; display: flex; align-items: center;
+    justify-content: center; padding: 24px;
+  }
+  .card {
+    background: #fff; border-radius: 20px; padding: 40px 32px;
+    width: 100%; max-width: 400px; text-align: center;
+    box-shadow: 0 24px 64px rgba(0,0,0,.3);
+  }
+  .emoji { font-size: 2.8rem; margin-bottom: 12px; }
+  .biz-name { font-size: 1.4rem; font-weight: 700; color: #0F172A; letter-spacing: -.02em; }
+  .subtitle { font-size: .9rem; color: #64748B; margin-top: 6px; margin-bottom: 32px; line-height: 1.5; }
+  .form-group { text-align: left; margin-bottom: 16px; }
+  label { display: block; font-size: .75rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 12px 14px; border: 1.5px solid #E2E8F0;
+    border-radius: 10px; font-size: .95rem; font-family: inherit; color: #0F172A;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus { outline: none; border-color: #6366F1; box-shadow: 0 0 0 3px #6366F118; }
+  .hint { font-size: .75rem; color: #94A3B8; margin-top: 4px; }
+  .btn {
+    width: 100%; padding: 14px; margin-top: 8px;
+    background: #6366F1; color: white; border: none;
+    border-radius: 10px; font-size: 1rem; font-weight: 700;
+    font-family: inherit; cursor: pointer; transition: opacity .15s;
+  }
+  .btn:hover { opacity: .88; }
+  .success { display: none; }
+  .success .check { font-size: 3rem; margin-bottom: 12px; }
+  .success h2 { font-size: 1.3rem; font-weight: 700; color: #0F172A; }
+  .success p { font-size: .9rem; color: #64748B; margin-top: 8px; line-height: 1.5; }
+  .powered { margin-top: 28px; font-size: .72rem; color: #CBD5E1; }
+  .powered span { color: #6366F1; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card" id="formCard">
+  <div class="emoji">⭐</div>
+  <div class="biz-name">{{ business_name }}</div>
+  <div class="subtitle">Enjoyed your experience? We'd love to hear from you — takes just 1 minute!</div>
+
+  <form method="POST" action="/r/{{ slug }}/submit" id="reviewForm">
+    <div class="form-group">
+      <label>Your Name</label>
+      <input name="customer_name" placeholder="Rahul Sharma" required>
+    </div>
+    <div class="form-group">
+      <label>WhatsApp Number</label>
+      <input name="customer_phone" placeholder="+919876543210" type="tel" required>
+      <div class="hint">We'll send your review link here</div>
+    </div>
+    <button type="submit" class="btn">Get Review Link →</button>
+  </form>
+
+  <div class="powered">Powered by <span>ReviewAgent</span></div>
+</div>
+
+<div class="card success" id="successCard">
+  <div class="check">🎉</div>
+  <h2>Thank you, {{ business_name }}!</h2>
+  <p>We've sent a Google Review link to your WhatsApp. It only takes 30 seconds — your feedback means a lot to us!</p>
+  <div class="powered" style="margin-top:24px">Powered by <span>ReviewAgent</span></div>
+</div>
+
+<script>
+  document.getElementById('reviewForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const data = new FormData(form);
+    const res = await fetch(form.action, { method: 'POST', body: data });
+    if (res.ok) {
+      document.getElementById('formCard').style.display = 'none';
+      document.getElementById('successCard').style.display = 'block';
+    }
+  });
+</script>
+</body>
+</html>
