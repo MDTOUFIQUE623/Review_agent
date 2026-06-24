@@ -7,31 +7,40 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f5f5f5; padding: 32px 24px; }
-  h1 { font-size: 1.4rem; color: #111; margin-bottom: 24px; }
-  a.btn { display: inline-block; padding: 8px 16px; background: #4f46e5; color: white; border-radius: 8px; text-decoration: none; font-size: .9rem; margin-bottom: 24px; }
+  .top { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  h1 { font-size: 1.4rem; color: #111; flex: 1; }
+  a.btn { padding: 8px 16px; background: #4f46e5; color: white; border-radius: 8px; text-decoration: none; font-size: .9rem; }
+  select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: .9rem; cursor: pointer; }
   table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
   th { background: #f9f9f9; padding: 12px 16px; text-align: left; font-size: .8rem; color: #666; text-transform: uppercase; letter-spacing: .04em; }
   td { padding: 12px 16px; font-size: .9rem; color: #333; border-top: 1px solid #f0f0f0; }
   .status { padding: 3px 10px; border-radius: 99px; font-size: .78rem; font-weight: 600; }
-  .pending  { background: #fef3c7; color: #92400e; }
-  .sent     { background: #dbeafe; color: #1e40af; }
-  .replied_positive { background: #d1fae5; color: #065f46; }
+  .pending   { background: #fef3c7; color: #92400e; }
+  .sent      { background: #dbeafe; color: #1e40af; }
+  .positive  { background: #d1fae5; color: #065f46; }
   .complaint { background: #fee2e2; color: #991b1b; }
-  .unsubscribed { background: #f3f4f6; color: #6b7280; }
+  .unsubscribe { background: #f3f4f6; color: #6b7280; }
+  .closed    { background: #f3f4f6; color: #6b7280; }
+  .other     { background: #fef9c3; color: #854d0e; }
+  .send_failed { background: #fee2e2; color: #991b1b; }
 </style>
 </head>
 <body>
-<h1>📊 Review Agent Dashboard</h1>
-<a class="btn" href="/">+ Log New Job</a>
+<div class="top">
+  <h1>📊 Review Agent Dashboard</h1>
+  <form method="GET" action="/dashboard" style="display:inline">
+    <select name="business_id" onchange="this.form.submit()">
+      {{ filter_options }}
+    </select>
+  </form>
+  <a class="btn" href="/">+ Log Job</a>
+  <a class="btn" href="/businesses" style="background:#6b7280">Businesses</a>
+</div>
 <table>
   <thead>
-    <tr>
-      <th>#</th><th>Customer</th><th>Phone</th><th>Business</th><th>Job</th><th>Status</th><th>Sent At</th>
-    </tr>
+    <tr><th>#</th><th>Business</th><th>Customer</th><th>Phone</th><th>Job</th><th>Status</th><th>Sent At</th></tr>
   </thead>
-  <tbody>
-    {{ rows }}
-  </tbody>
+  <tbody>{{ rows }}</tbody>
 </table>
 </body>
 </html>

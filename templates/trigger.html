@@ -8,7 +8,8 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding: 48px 16px; }
   .card { background: white; border-radius: 12px; padding: 32px; width: 100%; max-width: 480px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
-  h1 { font-size: 1.4rem; margin-bottom: 24px; color: #111; }
+  h1 { font-size: 1.4rem; margin-bottom: 6px; color: #111; }
+  .nav { font-size: .85rem; margin-bottom: 24px; } .nav a { color: #4f46e5; text-decoration: none; margin-right: 12px; }
   label { display: block; font-size: .85rem; font-weight: 600; color: #444; margin-bottom: 6px; margin-top: 18px; }
   input, select { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; }
   input:focus, select:focus { outline: none; border-color: #4f46e5; }
@@ -19,15 +20,16 @@
 <body>
 <div class="card">
   <h1>✅ Log Completed Job</h1>
+  <div class="nav"><a href="/dashboard">Dashboard</a><a href="/businesses">Manage Businesses</a></div>
   <form method="POST" action="/submit">
+    <label>Business</label>
+    <select name="business_id" required>{{ business_options }}</select>
+
     <label>Customer Name</label>
     <input name="customer_name" placeholder="Rahul Sharma" required>
 
     <label>Customer Phone (WhatsApp)</label>
     <input name="customer_phone" placeholder="+919876543210" required>
-
-    <label>Business Name</label>
-    <input name="business_name" placeholder="Cafe Blue" required>
 
     <label>Job Type</label>
     <select name="job_type">
@@ -35,6 +37,7 @@
       <option>Plumbing</option>
       <option>Electrical</option>
       <option>Cleaning</option>
+      <option>Cafe Visit</option>
       <option>Other</option>
     </select>
 
