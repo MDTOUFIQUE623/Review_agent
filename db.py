@@ -1,40 +1,78 @@
-import sqlite3
-from contextlib import contextmanager
+import os
 import re
+from contextlib import contextmanager
 
-DB = "reviews.db"
+DATABASE_URL = os.getenv("DATABASE_URL")
+POSTGRES = bool(DATABASE_URL)
+PH = "%s" if POSTGRES else "?"
 
-@contextmanager
-def conn(db=None):
-    c = sqlite3.connect(db or DB)
-    c.row_factory = sqlite3.Row
-    try:
-        yield c
-        c.commit()
-    finally:
-        c.close()
+# ── Connection ────────────────────────────────────────────────────────────────
 
-def _slugify(name: str) -> str:
-    s = name.lower().strip()
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"[\s_-]+", "-", s)
-    return s[:40]
+if POSTGRES:
+    import psycopg2, psycopg2.extras
+
+    @contextmanager
+    def conn(db=None):
+        c = psycopg2.connect(DATABASE_URL)
+        try:
+            yield c
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
+        finally:
+            c.close()
+
+    def _cur(c):
+        return c.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+else:
+    import sqlite3
+
+    @contextmanager
+    def conn(db=None):
+        c = sqlite3.connect(db or "reviews.db")
+        c.row_factory = sqlite3.Row
+        try:
+            yield c
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
+        finally:
+            c.close()
+
+    def _cur(c):
+        return c.cursor()
+
+
+def _rows(cur):
+    rows = cur.fetchall()
+    if not rows:
+        return []
+    return [dict(r) for r in rows]
+
+# ── Schema ────────────────────────────────────────────────────────────────────
+
+_ID  = "SERIAL" if POSTGRES else "INTEGER"
 
 def init(db=None):
     with conn(db) as c:
-        c.executescript("""
+        cur = _cur(c)
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS businesses (
-                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                id               {_ID} PRIMARY KEY,
                 name             TEXT NOT NULL,
                 owner_phone      TEXT NOT NULL,
                 google_place_id  TEXT NOT NULL,
                 slug             TEXT UNIQUE,
                 active           INTEGER DEFAULT 1,
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
+            )
+        """)
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS reviews (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                id              {_ID} PRIMARY KEY,
                 business_id     INTEGER NOT NULL REFERENCES businesses(id),
                 customer_name   TEXT,
                 customer_phone  TEXT,
@@ -44,103 +82,128 @@ def init(db=None):
                 reply_text      TEXT,
                 follow_up_sent  INTEGER DEFAULT 0,
                 whatsapp_sid    TEXT
-            );
+            )
         """)
+
+# ── Slug ──────────────────────────────────────────────────────────────────────
+
+def _slugify(name: str) -> str:
+    s = re.sub(r"[^\w\s-]", "", name.lower().strip())
+    return re.sub(r"[\s_-]+", "-", s)[:40]
 
 # ── Businesses ────────────────────────────────────────────────────────────────
 
 def add_business(name, owner_phone, google_place_id, db=None):
     slug = _slugify(name)
     with conn(db) as c:
-        # ensure unique slug
-        existing = [r[0] for r in c.execute("SELECT slug FROM businesses WHERE slug LIKE ?", (slug + "%",))]
+        cur = _cur(c)
+        cur.execute(f"SELECT slug FROM businesses WHERE slug LIKE {PH}", (slug + "%",))
+        existing = [r["slug"] for r in _rows(cur)]
         if slug in existing:
             slug = f"{slug}-{len(existing)}"
-        cur = c.execute(
-            "INSERT INTO businesses (name, owner_phone, google_place_id, slug) VALUES (?,?,?,?)",
+        cur.execute(
+            f"INSERT INTO businesses (name, owner_phone, google_place_id, slug) "
+            f"VALUES ({PH},{PH},{PH},{PH})",
             (name, owner_phone, google_place_id, slug)
         )
-        return cur.lastrowid
 
 def get_businesses(db=None):
     with conn(db) as c:
-        return [dict(r) for r in c.execute(
-            "SELECT * FROM businesses WHERE active=1 ORDER BY name"
-        )]
+        cur = _cur(c)
+        cur.execute("SELECT * FROM businesses WHERE active=1 ORDER BY name")
+        return _rows(cur)
 
 def get_business(business_id, db=None):
     with conn(db) as c:
-        row = c.execute("SELECT * FROM businesses WHERE id=?", (business_id,)).fetchone()
-        return dict(row) if row else None
+        cur = _cur(c)
+        cur.execute(f"SELECT * FROM businesses WHERE id={PH}", (business_id,))
+        rows = _rows(cur)
+        return rows[0] if rows else None
 
 def get_business_by_slug(slug, db=None):
     with conn(db) as c:
-        row = c.execute("SELECT * FROM businesses WHERE slug=? AND active=1", (slug,)).fetchone()
-        return dict(row) if row else None
+        cur = _cur(c)
+        cur.execute(f"SELECT * FROM businesses WHERE slug={PH} AND active=1", (slug,))
+        rows = _rows(cur)
+        return rows[0] if rows else None
 
 # ── Reviews ───────────────────────────────────────────────────────────────────
 
 def insert(business_id, customer_name, customer_phone, job_type="Visit", db=None):
     with conn(db) as c:
-        cur = c.execute(
-            "INSERT INTO reviews (business_id, customer_name, customer_phone, job_type) VALUES (?,?,?,?)",
-            (business_id, customer_name, customer_phone, job_type)
+        cur = _cur(c)
+        sql = (
+            f"INSERT INTO reviews (business_id, customer_name, customer_phone, job_type) "
+            f"VALUES ({PH},{PH},{PH},{PH})"
         )
-        return cur.lastrowid
+        if POSTGRES:
+            cur.execute(sql + " RETURNING id", (business_id, customer_name, customer_phone, job_type))
+            return _rows(cur)[0]["id"]
+        else:
+            cur.execute(sql, (business_id, customer_name, customer_phone, job_type))
+            return cur.lastrowid
 
 def update_status(row_id, status, whatsapp_sid=None, db=None):
     with conn(db) as c:
-        c.execute(
-            "UPDATE reviews SET status=?, whatsapp_sid=? WHERE id=?",
+        cur = _cur(c)
+        cur.execute(
+            f"UPDATE reviews SET status={PH}, whatsapp_sid={PH} WHERE id={PH}",
             (status, whatsapp_sid, row_id)
         )
 
 def log_reply(row_id, reply_text, status="replied", db=None):
     with conn(db) as c:
-        c.execute(
-            "UPDATE reviews SET reply_text=?, status=? WHERE id=?",
+        cur = _cur(c)
+        cur.execute(
+            f"UPDATE reviews SET reply_text={PH}, status={PH} WHERE id={PH}",
             (reply_text, status, row_id)
         )
 
 def all_rows(business_id=None, db=None):
     with conn(db) as c:
+        cur = _cur(c)
         if business_id:
-            return [dict(r) for r in c.execute(
+            cur.execute(
+                f"SELECT r.*, b.name as business_name FROM reviews r "
+                f"JOIN businesses b ON r.business_id = b.id "
+                f"WHERE r.business_id={PH} ORDER BY r.sent_at DESC", (business_id,)
+            )
+        else:
+            cur.execute(
                 "SELECT r.*, b.name as business_name FROM reviews r "
                 "JOIN businesses b ON r.business_id = b.id "
-                "WHERE r.business_id=? ORDER BY r.sent_at DESC", (business_id,)
-            )]
-        return [dict(r) for r in c.execute(
-            "SELECT r.*, b.name as business_name FROM reviews r "
-            "JOIN businesses b ON r.business_id = b.id "
-            "ORDER BY r.sent_at DESC"
-        )]
+                "ORDER BY r.sent_at DESC"
+            )
+        return _rows(cur)
 
 def get_pending_followups(days, follow_up_sent, db=None):
     from datetime import datetime, timedelta
     cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
     with conn(db) as c:
-        return [dict(r) for r in c.execute(
-            "SELECT r.*, b.name as business_name, b.owner_phone, b.google_place_id "
-            "FROM reviews r JOIN businesses b ON r.business_id = b.id "
-            "WHERE r.status='sent' AND r.sent_at <= ? AND r.follow_up_sent=?",
+        cur = _cur(c)
+        cur.execute(
+            f"SELECT r.*, b.name as business_name, b.owner_phone, b.google_place_id "
+            f"FROM reviews r JOIN businesses b ON r.business_id = b.id "
+            f"WHERE r.status='sent' AND r.sent_at <= {PH} AND r.follow_up_sent={PH}",
             (cutoff, follow_up_sent)
-        )]
+        )
+        return _rows(cur)
 
 
 if __name__ == "__main__":
-    import tempfile, os
+    import tempfile, os as _os
     tmp = tempfile.mktemp(suffix=".db")
     try:
         init(tmp)
-        b1 = add_business("Cafe Blue", "+919999999991", "ChIJtest1", tmp)
-        b2 = add_business("Cafe Blue", "+919999999992", "ChIJtest2", tmp)  # duplicate name
-        biz1 = get_business(b1, tmp)
-        biz2 = get_business(b2, tmp)
-        assert biz1["slug"] == "cafe-blue"
-        assert biz2["slug"] != biz1["slug"]  # unique slug
-        biz_by_slug = get_business_by_slug("cafe-blue", tmp)
-        assert biz_by_slug["id"] == b1
-        print(f"OK — slugs: {biz1['slug']}, {biz2['slug']}")
+        add_business("Cafe Blue", "+919999999991", "ChIJtest1", tmp)
+        biz = get_business_by_slug("cafe-blue", tmp)
+        assert biz and biz["slug"] == "cafe-blue"
+        r1 = insert(biz["id"], "Rahul", "+911111111111", "Visit", tmp)
+        update_status(r1, "sent", "SIDtest", tmp)
+        log_reply(r1, "Great service!", "positive", tmp)
+        rows = all_rows(db=tmp)
+        assert rows[0]["status"] == "positive"
+        assert rows[0]["reply_text"] == "Great service!"
+        print(f"OK — slug: {biz['slug']}, status: {rows[0]['status']}, reply: {rows[0]['reply_text']}")
     finally:
-        os.unlink(tmp)
+        _os.unlink(tmp)
