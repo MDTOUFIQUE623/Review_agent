@@ -120,7 +120,7 @@ async def qr_submit(slug: str, customer_name: str = Form(...), customer_phone: s
         )
         db.update_status(row_id, "sent", whatsapp_sid=sid)
     except Exception as ex:
-        db.update_status(row_id, "send_failed")
+        db.update_status(row_id, "send_failed", whatsapp_sid=f"Error: {ex}")
         print(f"[qr_submit] WhatsApp error: {ex}")
     return JSONResponse({"ok": True})
 
@@ -174,7 +174,7 @@ def submit(
         )
         db.update_status(row_id, "sent", whatsapp_sid=sid)
     except Exception as ex:
-        db.update_status(row_id, "send_failed")
+        db.update_status(row_id, "send_failed", whatsapp_sid=f"Error: {ex}")
         print(f"[submit] WhatsApp error: {ex}")
     return RedirectResponse(url="/dashboard", status_code=303)
 
@@ -261,7 +261,7 @@ def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)
         f"<td class='customer-name'>{e(r['customer_name'])}<br><span class='phone'>{e(r['customer_phone'])}</span></td>"
         f"<td>{e(r['business_name'])}</td>"
         f"<td>{e(r['job_type'])}</td>"
-        f"<td><span class='badge {e(r['status'])}'><span class='badge-dot'></span>{e(r['status']).replace('_',' ')}</span></td>"
+        f"<td><span class='badge {e(r['status'])}' {('title=\"' + e(r['whatsapp_sid']) + '\"') if r['status'] == 'send_failed' and r['whatsapp_sid'] else ''}><span class='badge-dot'></span>{e(r['status']).replace('_',' ')}</span></td>"
         f"<td class='reply-cell'>{('<span class=\"reply-text\">' + e(r['reply_text']) + '</span>') if r['reply_text'] else '<span class=\"no-reply\">—</span>'}</td>"
         f"<td>{e(fmt_datetime(r['sent_at']))}</td>"
         f"</tr>"

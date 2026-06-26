@@ -86,6 +86,15 @@ def init(db=None):
                 whatsapp_sid    TEXT
             )
         """)
+        # Migrate existing DBs — safe to run every time, fails silently if columns exist
+        for col_sql in [
+            "ALTER TABLE businesses ADD COLUMN status TEXT DEFAULT 'active'",
+            "ALTER TABLE businesses ADD COLUMN deactivate_at TIMESTAMP",
+        ]:
+            try:
+                cur.execute(col_sql)
+            except Exception:
+                pass  # column already exists
 
 # ── Slug ──────────────────────────────────────────────────────────────────────
 

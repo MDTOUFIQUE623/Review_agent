@@ -38,12 +38,27 @@ async def receive_reply(request: Request):
         return ""
 
     with db.conn() as c:
-        row = c.execute(
-            "SELECT r.*, b.owner_phone, b.name as business_name, b.google_place_id "
-            "FROM reviews r JOIN businesses b ON r.business_id = b.id "
-            "WHERE r.customer_phone=? ORDER BY r.sent_at DESC LIMIT 1",
-            (phone,)
-        ).fetchone()
+        cur = db._cur(c)
+
+        cur.execute(
+            f"""
+            SELECT
+                r.*,
+                b.owner_phone,
+                b.name AS business_name,
+                b.google_place_id
+            FROM reviews r
+            JOIN businesses b
+                ON r.business_id = b.id
+            WHERE r.customer_phone = {db.PH}
+            ORDER BY r.sent_at DESC
+            LIMIT 1
+            """,
+            (phone,),
+        )
+
+        rows = db._rows(cur)
+        row = rows[0] if rows else None
 
     if not row:
         print(f"[webhook] no row for phone: {phone}")
