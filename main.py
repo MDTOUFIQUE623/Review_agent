@@ -60,6 +60,17 @@ def render(filename, **kw):
 def e(val):
     return escape(str(val)) if val is not None else ""
 
+from datetime import datetime
+
+def fmt_datetime(value):
+    if value is None:
+        return ""
+
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M")
+
+    return str(value)[:16]
+
 # ── Login / Logout ────────────────────────────────────────────────────────────
 
 @app.get("/login", response_class=HTMLResponse)
@@ -252,7 +263,7 @@ def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)
         f"<td>{e(r['job_type'])}</td>"
         f"<td><span class='badge {e(r['status'])}'><span class='badge-dot'></span>{e(r['status']).replace('_',' ')}</span></td>"
         f"<td class='reply-cell'>{('<span class=\"reply-text\">' + e(r['reply_text']) + '</span>') if r['reply_text'] else '<span class=\"no-reply\">—</span>'}</td>"
-        f"<td>{e(r['sent_at'][:16])}</td>"
+        f"<td>{e(fmt_datetime(r['sent_at']))}</td>"
         f"</tr>"
         for r in rows
     ) or "<tr><td colspan='7' class='empty'>No review requests yet. <a href='/'>Log your first job →</a></td></tr>"
