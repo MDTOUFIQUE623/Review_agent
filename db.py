@@ -67,6 +67,8 @@ def init(db=None):
                 google_place_id  TEXT NOT NULL,
                 slug             TEXT UNIQUE,
                 active           INTEGER DEFAULT 1,
+                status           TEXT DEFAULT 'active',
+                deactivate_at    TIMESTAMP,
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -207,3 +209,41 @@ if __name__ == "__main__":
         print(f"OK — slug: {biz['slug']}, status: {rows[0]['status']}, reply: {rows[0]['reply_text']}")
     finally:
         _os.unlink(tmp)
+
+# ── Business lifecycle ────────────────────────────────────────────────────────
+
+def request_deactivation(business_id, db=None):
+    """Start 15-day grace period before deactivating."""
+    from datetime import datetime, timedelta
+    deactivate_at = (datetime.utcnow() + timedelta(days=15)).isoformat()
+    with conn(db) as c:
+        cur = _cur(c)
+        cur.execute(
+            f"UPDATE businesses SET status='deactivating', deactivate_at={PH} WHERE id={PH}",
+            (deactivate_at, business_id)
+        )
+
+def cancel_deactivation(business_id, db=None):
+    """Cancel a pending deactivation — business stays active."""
+    with conn(db) as c:
+        cur = _cur(c)
+        cur.execute(
+            f"UPDATE businesses SET status='active', deactivate_at=NULL WHERE id={PH}",
+            (business_id,)
+        )
+
+def process_deactivations(db=None):
+    """Called by scheduler daily — deactivates businesses past their grace period."""
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
+    with conn(db) as c:
+        cur = _cur(c)
+        cur.execute(
+            f"UPDATE businesses SET active=0, status='inactive' "
+            f"WHERE status='deactivating' AND deactivate_at <= {PH}",
+            (now,)
+        )
+        count = cur.rowcount
+    if count:
+        print(f"[db] deactivated {count} business(es)")
+    return count

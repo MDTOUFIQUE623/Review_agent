@@ -49,9 +49,28 @@
   .hint { font-size: .72rem; color: var(--slate); margin-top: 4px; }
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; background: var(--indigo); color: white; border-radius: 8px; font-size: .875rem; font-weight: 600; border: none; cursor: pointer; margin-top: 20px; width: 100%; justify-content: center; transition: opacity .15s; }
   .btn:hover { opacity: .88; }
-  .btn-sm { display:inline-block; padding: 4px 10px; background: var(--indigo); color: white; border-radius: 6px; text-decoration: none; font-size: .75rem; font-weight: 600; }
+  .btn-sm { display:inline-block; padding: 4px 10px; background: var(--indigo); color: white; border-radius: 6px; text-decoration: none; font-size: .75rem; font-weight: 600; border: none; cursor: pointer; }
+  .btn-red { background: #EF4444; }
+  .btn-green { background: #10B981; }
+  .badge-biz { padding: 3px 10px; border-radius: 99px; font-size: .72rem; font-weight: 600; }
+  .badge-biz.active { background: #D1FAE5; color: #065F46; }
+  .badge-biz.deactivating { background: #FEF3C7; color: #92400E; }
   code { font-size: .72rem; color: var(--slate); background: #F1F5F9; padding: 2px 6px; border-radius: 4px; }
   .empty { padding: 48px 24px; text-align: center; color: var(--slate); font-size: .9rem; }
+
+  /* Actions column alignment */
+  tbody td:nth-child(6) {
+    white-space: nowrap;
+  }
+  tbody td:nth-child(6) form {
+    display: inline-block !important;
+    margin: 0;
+    vertical-align: middle;
+  }
+  tbody td:nth-child(6) a.btn-sm,
+  tbody td:nth-child(6) button.btn-sm {
+    vertical-align: middle;
+  }
 
   /* Mobile Header Styling */
   .mobile-header {
@@ -159,7 +178,7 @@
     }
 
     table {
-      min-width: 600px;
+      min-width: 650px;
     }
   }
 </style>
@@ -202,7 +221,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>#</th><th>Business</th><th>Owner Phone</th><th>Landing URL</th><th>QR</th><th>Added</th></tr>
+          <tr><th>#</th><th>Business</th><th>Owner Phone</th><th>Landing URL</th><th>Status</th><th>Actions</th><th>Added</th></tr>
         </thead>
         <tbody>{{ rows }}</tbody>
       </table>

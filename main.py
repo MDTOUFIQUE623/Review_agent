@@ -173,17 +173,45 @@ def submit(
 def businesses_page(request: Request, _=Depends(require_auth)):
     rows = db.get_businesses()
     base_url = os.getenv("BASE_URL", "http://localhost:8000")
+
+    def _status_badge(b):
+        status = b.get("status", "active")
+        if status == "deactivating":
+            days_left = ""
+            if b.get("deactivate_at"):
+                from datetime import datetime
+                try:
+                    delta = datetime.fromisoformat(str(b["deactivate_at"])) - datetime.utcnow()
+                    days_left = f" ({max(0, delta.days)}d left)"
+                except Exception:
+                    pass
+            return f"<span class='badge-biz deactivating'>Deactivating{days_left}</span>"
+        return "<span class='badge-biz active'>Active</span>"
+
+    def _actions(b):
+        bid = e(b["id"])
+        status = b.get("status", "active")
+        qr = f"<a href='/businesses/{bid}/qr' class='btn-sm'>&#11015; QR</a>"
+        if status == "deactivating":
+            return qr + (
+                f" <form method='POST' action='/businesses/{bid}/cancel-deactivation' style='display:inline'>"
+                f"<button class='btn-sm btn-green'>Cancel</button></form>"
+            )
+        return qr + (
+            f" <form method='POST' action='/businesses/{bid}/deactivate' style='display:inline'>"
+            f"<button class='btn-sm btn-red'>Remove</button></form>"
+        )
+
     rows_html = "".join(
         f"<tr><td>{e(b['id'])}</td>"
         f"<td class='biz-name'>{e(b['name'])}</td>"
         f"<td>{e(b['owner_phone'])}</td>"
         f"<td><code>{base_url}/r/{e(b['slug'])}</code></td>"
-        f"<td>"
-        f"<a href='/businesses/{e(b['id'])}/qr' class='btn-sm'>⬇ QR</a>"
-        f"</td>"
-        f"<td>{e(b['created_at'][:10])}</td></tr>"
+        f"<td>{_status_badge(b)}</td>"
+        f"<td>{_actions(b)}</td>"
+        f"<td>{e(str(b['created_at'])[:10])}</td></tr>"
         for b in rows
-    ) or "<tr><td colspan='6' class='empty'>No businesses yet. Add your first client →</td></tr>"
+    ) or "<tr><td colspan='7' class='empty'>No businesses yet. Add your first client →</td></tr>"
     return render("businesses.html", rows=rows_html)
 
 @app.post("/businesses/add")
@@ -200,9 +228,9 @@ def add_business(
     return RedirectResponse(url="/businesses", status_code=303)
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-from typing import Optional
+
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request, business_id: Optional[int] = None, _=Depends(require_auth)):
+def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)):
     businesses = db.get_businesses()
     rows = db.all_rows(business_id=business_id)
 
@@ -237,3 +265,21 @@ def dashboard(request: Request, business_id: Optional[int] = None, _=Depends(req
         stat_complaint=complaint,
         stat_pending=pending,
     )
+
+# ── Business lifecycle ────────────────────────────────────────────────────────
+
+@app.post("/businesses/{business_id}/deactivate")
+def deactivate_business(business_id: int, request: Request, _=Depends(require_auth)):
+    biz = db.get_business(business_id)
+    if not biz:
+        raise HTTPException(status_code=404)
+    db.request_deactivation(business_id)
+    return RedirectResponse(url="/businesses", status_code=303)
+
+@app.post("/businesses/{business_id}/cancel-deactivation")
+def cancel_deactivation(business_id: int, request: Request, _=Depends(require_auth)):
+    biz = db.get_business(business_id)
+    if not biz:
+        raise HTTPException(status_code=404)
+    db.cancel_deactivation(business_id)
+    return RedirectResponse(url="/businesses", status_code=303)
