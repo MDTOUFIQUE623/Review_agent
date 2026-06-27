@@ -46,7 +46,9 @@ async def receive_reply(request: Request):
                 r.*,
                 b.owner_phone,
                 b.name AS business_name,
-                b.google_place_id
+                b.google_place_id,
+                b.provider,
+                b.provider_config
             FROM reviews r
             JOIN businesses b
                 ON r.business_id = b.id
@@ -75,7 +77,7 @@ async def receive_reply(request: Request):
 
     # 2. Auto-reply to customer
     try:
-        whatsapp.send_raw(phone, AUTO_REPLIES[label])
+        whatsapp.send_raw(phone, AUTO_REPLIES[label], row)
         print(f"[webhook] auto-reply sent ({label})")
     except Exception as e:
         print(f"[webhook] auto-reply failed: {e}")

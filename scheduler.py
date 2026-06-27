@@ -29,7 +29,8 @@ def run_checks():
         try:
             whatsapp.send_raw(
                 r["customer_phone"],
-                _followup_msg(r["customer_name"], r["job_type"], r["google_place_id"])
+                _followup_msg(r["customer_name"], r["job_type"], r["google_place_id"]),
+                r
             )
             with db.conn() as c:
                 cur = db._cur(c)
@@ -43,7 +44,8 @@ def run_checks():
         try:
             whatsapp.send_raw(
                 r["customer_phone"],
-                _final_msg(r["customer_name"], r["job_type"], r["business_name"], r["google_place_id"])
+                _final_msg(r["customer_name"], r["job_type"], r["business_name"], r["google_place_id"]),
+                r
             )
             with db.conn() as c:
                 cur = db._cur(c)

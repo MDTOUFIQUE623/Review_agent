@@ -116,7 +116,8 @@ async def qr_submit(slug: str, customer_name: str = Form(...), customer_phone: s
     try:
         sid = whatsapp.send_review_request(
             customer_name, customer_phone,
-            biz["name"], "visit", biz["google_place_id"]
+            biz["name"], "visit", biz["google_place_id"],
+            biz
         )
         db.update_status(row_id, "sent", whatsapp_sid=sid)
     except Exception as ex:
@@ -170,7 +171,8 @@ def submit(
     try:
         sid = whatsapp.send_review_request(
             customer_name, customer_phone,
-            biz["name"], job_type, biz["google_place_id"]
+            biz["name"], job_type, biz["google_place_id"],
+            biz
         )
         db.update_status(row_id, "sent", whatsapp_sid=sid)
     except Exception as ex:
@@ -231,11 +233,12 @@ def add_business(
     name:            str = Form(...),
     owner_phone:     str = Form(...),
     google_place_id: str = Form(...),
+    provider:        str = Form("twilio"),
     _=Depends(require_auth),
 ):
     if not PHONE_RE.match(owner_phone):
         raise HTTPException(status_code=400, detail="Invalid phone. Use: +919876543210")
-    db.add_business(name, owner_phone, google_place_id)
+    db.add_business(name, owner_phone, google_place_id, provider, "{}")
     return RedirectResponse(url="/businesses", status_code=303)
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────

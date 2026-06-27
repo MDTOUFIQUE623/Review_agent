@@ -66,6 +66,8 @@ def init(db=None):
                 owner_phone      TEXT NOT NULL,
                 google_place_id  TEXT NOT NULL,
                 slug             TEXT UNIQUE,
+                provider         TEXT DEFAULT 'twilio',
+                provider_config  TEXT DEFAULT '{{}}',
                 active           INTEGER DEFAULT 1,
                 status           TEXT DEFAULT 'active',
                 deactivate_at    TIMESTAMP,
@@ -90,6 +92,8 @@ def init(db=None):
         for col_sql in [
             "ALTER TABLE businesses ADD COLUMN status TEXT DEFAULT 'active'",
             "ALTER TABLE businesses ADD COLUMN deactivate_at TIMESTAMP",
+            "ALTER TABLE businesses ADD COLUMN provider TEXT DEFAULT 'twilio'",
+            "ALTER TABLE businesses ADD COLUMN provider_config TEXT DEFAULT '{}'",
         ]:
             try:
                 cur.execute(col_sql)
@@ -104,7 +108,7 @@ def _slugify(name: str) -> str:
 
 # ── Businesses ────────────────────────────────────────────────────────────────
 
-def add_business(name, owner_phone, google_place_id, db=None):
+def add_business(name, owner_phone, google_place_id, provider="twilio", provider_config="{}", db=None):
     slug = _slugify(name)
     with conn(db) as c:
         cur = _cur(c)
@@ -113,9 +117,9 @@ def add_business(name, owner_phone, google_place_id, db=None):
         if slug in existing:
             slug = f"{slug}-{len(existing)}"
         cur.execute(
-            f"INSERT INTO businesses (name, owner_phone, google_place_id, slug) "
-            f"VALUES ({PH},{PH},{PH},{PH})",
-            (name, owner_phone, google_place_id, slug)
+            f"INSERT INTO businesses (name, owner_phone, google_place_id, slug, provider, provider_config) "
+            f"VALUES ({PH},{PH},{PH},{PH},{PH},{PH})",
+            (name, owner_phone, google_place_id, slug, provider, provider_config)
         )
 
 def get_businesses(db=None):
@@ -193,7 +197,7 @@ def get_pending_followups(days, follow_up_sent, db=None):
     with conn(db) as c:
         cur = _cur(c)
         cur.execute(
-            f"SELECT r.*, b.name as business_name, b.owner_phone, b.google_place_id "
+            f"SELECT r.*, b.name as business_name, b.owner_phone, b.google_place_id, b.provider, b.provider_config "
             f"FROM reviews r JOIN businesses b ON r.business_id = b.id "
             f"WHERE r.status='sent' AND r.sent_at <= {PH} AND r.follow_up_sent={PH}",
             (cutoff, follow_up_sent)
@@ -206,7 +210,7 @@ if __name__ == "__main__":
     tmp = tempfile.mktemp(suffix=".db")
     try:
         init(tmp)
-        add_business("Cafe Blue", "+919999999991", "ChIJtest1", tmp)
+        add_business("Cafe Blue", "+919999999991", "ChIJtest1", provider="interakt", provider_config='{"api_key":"test"}', db=tmp)
         biz = get_business_by_slug("cafe-blue", tmp)
         assert biz and biz["slug"] == "cafe-blue"
         r1 = insert(biz["id"], "Rahul", "+911111111111", "Visit", tmp)

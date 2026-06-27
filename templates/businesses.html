@@ -241,6 +241,12 @@
         <input name="google_place_id" placeholder="ChIJgUbEo8cfqokR5..." required>
         <div class="hint">Find at developers.google.com/maps/documentation/places/web-service/place-id</div>
 
+        <label>Provider</label>
+        <select name="provider" id="providerSelect" style="width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: .875rem; margin-top: 5px;">
+          <option value="twilio">Twilio (Default)</option>
+          <option value="interakt">Interakt</option>
+        </select>
+
         <button type="submit" class="btn">Add Business →</button>
       </form>
     </div>
