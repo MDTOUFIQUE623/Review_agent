@@ -1117,6 +1117,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "qrcode" },
+    { name = "requests" },
     { name = "twilio" },
     { name = "uvicorn" },
 ]
@@ -1134,6 +1135,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "qrcode", specifier = ">=8.2" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "twilio", specifier = ">=9.10.9" },
     { name = "uvicorn", specifier = ">=0.49.0" },
 ]

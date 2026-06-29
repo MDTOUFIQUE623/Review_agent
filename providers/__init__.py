@@ -3,11 +3,12 @@ Provider router — picks the right WhatsApp provider per business.
 Add new providers here without touching anything else.
 """
 import json
-from . import twilio_p, interakt_p
+from . import twilio_p, interakt_p, meta_p
 
 PROVIDERS = {
     "twilio":   twilio_p,
-    "interakt": interakt_p,
+    "interakt": interakt_p,  # hidden from UI, kept for future use
+    "meta":     meta_p,
 }
 
 def _provider(name: str):
@@ -37,13 +38,13 @@ def send_review_request(
     config = _config(business)
     review_url = f"https://search.google.com/local/writereview?placeid={google_place_id}"
 
-    if provider_name == "interakt":
+    if provider_name in ("interakt", "meta"):
         template_name = config.get("template_name", "customer_review_request_v1")
         return p.send_template(
-            to_phone,
-            template_name,
-            [customer_name, business_name, job_type, review_url],
-            config,
+            to_phone=to_phone,
+            template_name=template_name,
+            variables=[customer_name, business_name, job_type, review_url],
+            config=config,
         )
 
     # Twilio and any other provider — free-form
