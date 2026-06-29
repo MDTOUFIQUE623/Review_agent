@@ -7,6 +7,7 @@ from html import escape
 from itsdangerous import URLSafeTimedSerializer, BadSignature
 import re, os, io
 import db, whatsapp, webhook, scheduler
+import redis, phonenumbers, httpx
 
 load_dotenv()
 
@@ -16,13 +17,24 @@ app.include_router(webhook.router)
 HERE = Path(__file__).parent
 PHONE_RE = re.compile(r"^\+\d{10,15}$")
 
-# ── Session ───────────────────────────────────────────────────────────────────
+# ── Redis Rate Limiter ────────────────────────────────────────────────────────
+
+# ponytail: redis rate limiting client
+redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+
+# ── Session & CSRF ────────────────────────────────────────────────────────────
 
 def _signer():
-    return URLSafeTimedSerializer(os.getenv("SECRET_KEY", "dev-secret-change-in-prod"))
+    key = os.getenv("SECRET_KEY")
+    if not key:
+        raise RuntimeError("SECRET_KEY environment variable is not set.")
+    return URLSafeTimedSerializer(key)
 
 def set_session(response, username):
-    token = _signer().dumps(username)
+    import secrets
+    csrf_token = secrets.token_hex(32)
+    session_data = {"username": username, "csrf_token": csrf_token}
+    token = _signer().dumps(session_data)
     response.set_cookie("session", token, httponly=True, samesite="lax", max_age=60*60*8)
 
 def get_session(request: Request):
@@ -30,7 +42,8 @@ def get_session(request: Request):
     if not token:
         return None
     try:
-        return _signer().loads(token, max_age=60*60*8)
+        data = _signer().loads(token, max_age=60*60*8)
+        return data if isinstance(data, dict) else {"username": data}
     except BadSignature:
         return None
 
@@ -38,11 +51,21 @@ def require_auth(request: Request):
     if not get_session(request):
         raise HTTPException(status_code=302, headers={"Location": "/login"})
 
+async def verify_csrf(request: Request):
+    if request.method == "POST":
+        session_data = get_session(request)
+        if not session_data or "csrf_token" not in session_data:
+            raise HTTPException(status_code=403, detail="CSRF token missing from session")
+        form_data = await request.form()
+        form_token = form_data.get("csrf_token")
+        if not form_token or form_token != session_data["csrf_token"]:
+            raise HTTPException(status_code=403, detail="CSRF token invalid or missing")
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
 def startup():
-    required = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM", "OPENAI_API_KEY"]
+    required = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM", "OPENAI_API_KEY", "SECRET_KEY"]
     missing = [k for k in required if not os.getenv(k)]
     if missing:
         raise RuntimeError(f"Missing required env vars: {missing}")
@@ -70,6 +93,32 @@ def fmt_datetime(value):
         return value.strftime("%Y-%m-%d %H:%M")
 
     return str(value)[:16]
+
+def check_rate_limit(ip: str) -> bool:
+    key = f"rate:{ip}"
+    try:
+        count = redis_client.incr(key)
+        if count == 1:
+            redis_client.expire(key, 60)
+        return count <= 2
+    except Exception as ex:
+        # ponytail: fallback to allowing request if Redis connection fails in prod
+        print(f"[limiter] Redis connection error: {ex}")
+        return True
+
+def sanitize_input(text: str) -> str:
+    # ponytail: simple regex tag stripper to sanitize input and avoid markup dependencies
+    text = re.sub(r"<script.*?>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    return re.sub(r"<[^>]*>", "", text).strip()
+
+def is_valid_phone(phone: str) -> bool:
+    try:
+        parsed = phonenumbers.parse(phone)
+        if not phone.startswith("+"):
+            return False
+        return phonenumbers.is_valid_number(parsed)
+    except Exception:
+        return False
 
 # ── Login / Logout ────────────────────────────────────────────────────────────
 
@@ -106,12 +155,22 @@ def qr_landing(slug: str):
     return render("landing.html", business_name=e(biz["name"]), slug=e(slug))
 
 @app.post("/r/{slug}/submit")
-async def qr_submit(slug: str, customer_name: str = Form(...), customer_phone: str = Form(...)):
+async def qr_submit(request: Request, slug: str, customer_name: str = Form(...), customer_phone: str = Form(...)):
+    # ponytail: check rate limit first to avoid DB / api overhead
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or request.client.host
+    if not check_rate_limit(ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a minute and try again.")
+
     biz = db.get_business_by_slug(slug)
     if not biz:
         raise HTTPException(status_code=404, detail="Business not found")
-    if not PHONE_RE.match(customer_phone):
-        raise HTTPException(status_code=400, detail="Invalid phone number")
+
+    customer_name = sanitize_input(customer_name)
+    customer_phone = customer_phone.strip()
+
+    if not is_valid_phone(customer_phone):
+        raise HTTPException(status_code=400, detail="Invalid phone number format.")
+
     row_id = db.insert(biz["id"], customer_name, customer_phone, "Visit")
     try:
         sid = whatsapp.send_review_request(
@@ -120,9 +179,15 @@ async def qr_submit(slug: str, customer_name: str = Form(...), customer_phone: s
             biz
         )
         db.update_status(row_id, "sent", whatsapp_sid=sid)
+    except httpx.HTTPError as ex:
+        db.update_status(row_id, "send_failed", whatsapp_sid=f"HTTP Error: {ex}")
+        print(f"[qr_submit] HTTP error: {ex}")
+    except ValueError as ex:
+        db.update_status(row_id, "send_failed", whatsapp_sid=f"Value Error: {ex}")
+        print(f"[qr_submit] Value error: {ex}")
     except Exception as ex:
         db.update_status(row_id, "send_failed", whatsapp_sid=f"Error: {ex}")
-        print(f"[qr_submit] WhatsApp error: {ex}")
+        print(f"[qr_submit] General error: {ex}")
     return JSONResponse({"ok": True})
 
 # ── QR code image download ────────────────────────────────────────────────────
@@ -151,19 +216,26 @@ def trigger_form(request: Request, _=Depends(require_auth)):
     options = "".join(f'<option value="{e(b["id"])}">{e(b["name"])}</option>' for b in businesses)
     if not options:
         options = '<option disabled>No businesses yet — add one first</option>'
-    return render("trigger.html", business_options=options)
+    session_data = get_session(request)
+    csrf_token = session_data.get("csrf_token") if session_data else ""
+    return render("trigger.html", business_options=options, csrf_token=csrf_token)
 
 @app.post("/submit")
-def submit(
+async def submit(
     request: Request,
     business_id:    int = Form(...),
     customer_name:  str = Form(...),
     customer_phone: str = Form(...),
     job_type:       str = Form(...),
     _=Depends(require_auth),
+    __=Depends(verify_csrf),
 ):
-    if not PHONE_RE.match(customer_phone):
-        raise HTTPException(status_code=400, detail="Invalid phone. Use: +919876543210")
+    customer_name = sanitize_input(customer_name)
+    customer_phone = customer_phone.strip()
+    job_type = sanitize_input(job_type)
+
+    if not is_valid_phone(customer_phone):
+        raise HTTPException(status_code=400, detail="Invalid phone. Use format: +919876543210")
     biz = db.get_business(business_id)
     if not biz:
         raise HTTPException(status_code=400, detail="Business not found")
@@ -175,9 +247,15 @@ def submit(
             biz
         )
         db.update_status(row_id, "sent", whatsapp_sid=sid)
+    except httpx.HTTPError as ex:
+        db.update_status(row_id, "send_failed", whatsapp_sid=f"HTTP Error: {ex}")
+        print(f"[submit] HTTP error: {ex}")
+    except ValueError as ex:
+        db.update_status(row_id, "send_failed", whatsapp_sid=f"Value Error: {ex}")
+        print(f"[submit] Value error: {ex}")
     except Exception as ex:
         db.update_status(row_id, "send_failed", whatsapp_sid=f"Error: {ex}")
-        print(f"[submit] WhatsApp error: {ex}")
+        print(f"[submit] General error: {ex}")
     return RedirectResponse(url="/dashboard", status_code=303)
 
 # ── Businesses ────────────────────────────────────────────────────────────────
@@ -186,6 +264,8 @@ def submit(
 def businesses_page(request: Request, _=Depends(require_auth)):
     rows = db.get_businesses()
     base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    session_data = get_session(request)
+    csrf_token = session_data.get("csrf_token") if session_data else ""
 
     def _status_badge(b):
         status = b.get("status", "active")
@@ -201,18 +281,19 @@ def businesses_page(request: Request, _=Depends(require_auth)):
             return f"<span class='badge-biz deactivating'>Deactivating{days_left}</span>"
         return "<span class='badge-biz active'>Active</span>"
 
-    def _actions(b):
+    def _actions(b, token):
         bid = e(b["id"])
         status = b.get("status", "active")
         qr = f"<a href='/businesses/{bid}/qr' class='btn-sm'>&#11015; QR</a>"
+        csrf_input = f"<input type='hidden' name='csrf_token' value='{token}'>"
         if status == "deactivating":
             return qr + (
                 f" <form method='POST' action='/businesses/{bid}/cancel-deactivation' style='display:inline'>"
-                f"<button class='btn-sm btn-green'>Cancel</button></form>"
+                f"{csrf_input}<button class='btn-sm btn-green'>Cancel</button></form>"
             )
         return qr + (
             f" <form method='POST' action='/businesses/{bid}/deactivate' style='display:inline'>"
-            f"<button class='btn-sm btn-red'>Remove</button></form>"
+            f"{csrf_input}<button class='btn-sm btn-red'>Remove</button></form>"
         )
 
     rows_html = "".join(
@@ -221,11 +302,11 @@ def businesses_page(request: Request, _=Depends(require_auth)):
         f"<td>{e(b['owner_phone'])}</td>"
         f"<td><code>{base_url}/r/{e(b['slug'])}</code></td>"
         f"<td>{_status_badge(b)}</td>"
-        f"<td>{_actions(b)}</td>"
+        f"<td>{_actions(b, csrf_token)}</td>"
         f"<td>{e(str(b['created_at'])[:10])}</td></tr>"
         for b in rows
     ) or "<tr><td colspan='7' class='empty'>No businesses yet. Add your first client →</td></tr>"
-    return render("businesses.html", rows=rows_html)
+    return render("businesses.html", rows=rows_html, csrf_token=csrf_token)
 
 @app.post("/businesses/add")
 def add_business(
@@ -235,9 +316,11 @@ def add_business(
     google_place_id: str = Form(...),
     provider:        str = Form("twilio"),
     _=Depends(require_auth),
+    __=Depends(verify_csrf),
 ):
-    if not PHONE_RE.match(owner_phone):
-        raise HTTPException(status_code=400, detail="Invalid phone. Use: +919876543210")
+    owner_phone = owner_phone.strip()
+    if not is_valid_phone(owner_phone):
+        raise HTTPException(status_code=400, detail="Invalid phone. Use format: +919876543210")
     db.add_business(name, owner_phone, google_place_id, provider, "{}")
     return RedirectResponse(url="/businesses", status_code=303)
 
@@ -270,6 +353,9 @@ def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)
         f"</tr>"
         for r in rows
     ) or "<tr><td colspan='7' class='empty'>No review requests yet. <a href='/'>Log your first job →</a></td></tr>"
+
+    session_data = get_session(request)
+    csrf_token = session_data.get("csrf_token") if session_data else ""
 
     return render("dashboard.html",
         filter_options=filter_options,

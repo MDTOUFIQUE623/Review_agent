@@ -181,6 +181,7 @@
     </div>
 
     <form method="POST" action="/submit">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label>Business</label>
       <select name="business_id" required>{{ business_options }}</select>
 

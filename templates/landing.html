@@ -6,6 +6,7 @@
 <title>Leave a Review — {{ business_name }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/18.2.1/css/intlTelInput.css">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -38,12 +39,51 @@
     font-family: inherit; cursor: pointer; transition: opacity .15s;
   }
   .btn:hover { opacity: .88; }
+  .btn:disabled { opacity: 0.65; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: #6366F1; border: 1.5px solid #6366F1; margin-top: 0; }
+  .btn-ghost:hover { background: #6366F110; opacity: 1; }
   .success { display: none; }
   .success .check { font-size: 3rem; margin-bottom: 12px; }
   .success h2 { font-size: 1.3rem; font-weight: 700; color: #0F172A; }
   .success p { font-size: .9rem; color: #64748B; margin-top: 8px; line-height: 1.5; }
   .powered { margin-top: 28px; font-size: .72rem; color: #CBD5E1; }
   .powered span { color: #6366F1; font-weight: 600; }
+  
+  /* intl-tel-input Custom Overrides */
+  .iti { width: 100%; display: block; text-align: left; }
+  .iti__country-list { text-align: left; color: #0F172A; }
+  
+  /* Trust Badge Styles */
+  .trust-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 20px;
+    font-size: 0.78rem;
+    color: #64748B;
+    background: #F8FAFC;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid #F1F5F9;
+  }
+  .trust-badge svg {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    fill: #10B981;
+  }
+  .cta-box {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #F1F5F9;
+  }
+  .cta-hint {
+    font-size: 0.8rem;
+    color: #64748B;
+    margin-bottom: 8px;
+  }
+  
   @media (max-width: 480px) {
     body { padding: 16px; }
     .card { padding: 28px 20px; border-radius: 16px; }
@@ -66,31 +106,100 @@
     </div>
     <div class="form-group">
       <label>WhatsApp Number</label>
-      <input name="customer_phone" placeholder="+919876543210" type="tel" required>
+      <input name="customer_phone" type="tel" required style="padding-left: 52px;">
       <div class="hint">We'll send your review link here</div>
     </div>
+    <div id="errorBox" style="display: none; color: #991B1B; background: #FEF2F2; border: 1px solid #FEE2E2; padding: 12px 14px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 16px; text-align: left;"></div>
     <button type="submit" class="btn">Get Review Link →</button>
   </form>
+
+  <div class="trust-badge">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+    <span>We never spam or share your number.</span>
+  </div>
 
   <div class="powered">Powered by <span>ReviewAgent</span></div>
 </div>
 
 <div class="card success" id="successCard">
   <div class="check">🎉</div>
-  <h2>Thank you, {{ business_name }}!</h2>
-  <p>We've sent a Google Review link to your WhatsApp. It only takes 30 seconds — your feedback means a lot to us!</p>
+  <h2>Thank you, <span id="successCustomerName"></span>!</h2>
+  <p>Your review link is on its way to WhatsApp. Please open the message and tap the button to leave your review.</p>
+  
+  <div class="cta-box">
+    <div class="cta-hint">Did not receive the message?</div>
+    <button onclick="window.location.reload()" class="btn btn-ghost">Try Again</button>
+  </div>
+  
   <div class="powered" style="margin-top:24px">Powered by <span>ReviewAgent</span></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/18.2.1/js/intlTelInput.min.js"></script>
 <script>
-  document.getElementById('reviewForm').addEventListener('submit', async function(e) {
+  const errorBox = document.getElementById('errorBox');
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = 'block';
+  }
+  function hideError() {
+    errorBox.style.display = 'none';
+  }
+
+  const phoneInput = document.querySelector('input[name="customer_phone"]');
+  const iti = window.intlTelInput(phoneInput, {
+    initialCountry: "auto",
+    separateDialCode: true,
+    geoIpLookup: function(callback) {
+      fetch("https://ipapi.co/json")
+        .then(res => res.json())
+        .then(data => callback(data.country_code))
+        .catch(() => callback("in"));
+    },
+    utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/18.2.1/js/utils.min.js"
+  });
+
+  const form = document.getElementById('reviewForm');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  form.addEventListener('submit', async function(e) {
     e.preventDefault();
-    const form = e.target;
+    hideError();
+    
+    // Disable button & show loading text
+    submitBtn.disabled = true;
+    const origText = submitBtn.innerHTML;
+    submitBtn.innerHTML = 'Sending...';
+
+    const customerName = form.querySelector('[name="customer_name"]').value;
+    const fullNumber = iti.getNumber();
+
+    if (!iti.isValidNumber()) {
+      showError("Please enter a valid WhatsApp number.");
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = origText;
+      return;
+    }
+
+    // Construct FormData and override number to full international E.164 number
     const data = new FormData(form);
-    const res = await fetch(form.action, { method: 'POST', body: data });
-    if (res.ok) {
-      document.getElementById('formCard').style.display = 'none';
-      document.getElementById('successCard').style.display = 'block';
+    data.set('customer_phone', fullNumber);
+
+    try {
+      const res = await fetch(form.action, { method: 'POST', body: data });
+      if (res.ok) {
+        document.getElementById('successCustomerName').textContent = customerName;
+        document.getElementById('formCard').style.display = 'none';
+        document.getElementById('successCard').style.display = 'block';
+      } else {
+        const err = await res.json();
+        showError(err.detail || "Something went wrong. Please check the details and try again.");
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origText;
+      }
+    } catch (err) {
+      showError("Network error. Please check your connection and try again.");
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = origText;
     }
   });
 </script>

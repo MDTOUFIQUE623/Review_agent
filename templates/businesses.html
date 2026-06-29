@@ -230,6 +230,7 @@
     <div class="card">
       <div class="card-title">Add New Client</div>
       <form method="POST" action="/businesses/add">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label>Business Name</label>
         <input name="name" placeholder="Cafe Blue" required>
 

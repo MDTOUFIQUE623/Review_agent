@@ -176,6 +176,14 @@ def log_reply(row_id, reply_text, status="replied", db=None):
             (reply_text, status, row_id)
         )
 
+def update_status_by_sid(whatsapp_sid, status, db=None):
+    with conn(db) as c:
+        cur = _cur(c)
+        cur.execute(
+            f"UPDATE reviews SET status={PH} WHERE whatsapp_sid={PH} AND status NOT IN ('positive', 'complaint', 'unsubscribe', 'closed')",
+            (status, whatsapp_sid)
+        )
+
 def all_rows(business_id=None, db=None):
     with conn(db) as c:
         cur = _cur(c)
