@@ -2,7 +2,7 @@ import os
 import httpx
 
 # Meta Cloud API endpoint
-META_API = "https://graph.facebook.com/v19.0/{phone_number_id}/messages"
+META_API = "https://graph.facebook.com/v20.0/{phone_number_id}/messages"
 
 def _headers():
     token = os.getenv("META_ACCESS_TOKEN")
@@ -33,6 +33,16 @@ def send(to_phone: str, message: str, config: dict = None) -> str:
         headers=_headers(),
         timeout=10,
     )
+    if resp.status_code >= 400:
+        print("=" * 60)
+        print("Meta API Error")
+        print("=" * 60)
+        print("Status:", resp.status_code)
+        print("URL:", resp.request.url)
+        print("Request JSON:", resp.request.content.decode())
+        print("Response:", resp.text)
+        print("=" * 60)
+
     resp.raise_for_status()
     return resp.json().get("messages", [{}])[0].get("id", "sent")
 

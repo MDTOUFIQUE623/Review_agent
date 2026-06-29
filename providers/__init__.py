@@ -39,7 +39,7 @@ def send_review_request(
     review_url = f"https://search.google.com/local/writereview?placeid={google_place_id}"
 
     if provider_name in ("interakt", "meta"):
-        template_name = config.get("template_name", "customer_review_request_v1")
+        template_name = config.get("template_name", "review_request")
         return p.send_template(
             to_phone=to_phone,
             template_name=template_name,

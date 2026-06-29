@@ -49,7 +49,9 @@ def get_session(request: Request):
         return None
     try:
         data = _signer().loads(token, max_age=60*60*8)
-        return data if isinstance(data, dict) else {"username": data}
+        if not isinstance(data, dict) or "csrf_token" not in data:
+            return None
+        return data
     except BadSignature:
         return None
 
@@ -210,12 +212,15 @@ async def qr_submit(request: Request, slug: str, customer_name: str = Form(...),
     except httpx.HTTPError as ex:
         db.update_status(row_id, "send_failed", whatsapp_sid=f"HTTP Error: {ex}")
         print(f"[qr_submit] HTTP error: {ex}")
+        raise HTTPException(status_code=500, detail="Unable to send WhatsApp message due to provider HTTP error.")
     except ValueError as ex:
         db.update_status(row_id, "send_failed", whatsapp_sid=f"Value Error: {ex}")
         print(f"[qr_submit] Value error: {ex}")
+        raise HTTPException(status_code=500, detail="Unable to send WhatsApp message due to invalid value configuration.")
     except Exception as ex:
         db.update_status(row_id, "send_failed", whatsapp_sid=f"Error: {ex}")
         print(f"[qr_submit] General error: {ex}")
+        raise HTTPException(status_code=500, detail="Unable to send WhatsApp message.")
     return JSONResponse({"ok": True})
 
 # ── QR code image download ────────────────────────────────────────────────────
