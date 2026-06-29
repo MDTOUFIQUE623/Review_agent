@@ -130,6 +130,12 @@ def get_businesses(db=None):
         cur.execute("SELECT * FROM businesses WHERE active=1 ORDER BY name")
         return _rows(cur)
 
+def get_active_providers(db=None):
+    with conn(db) as c:
+        cur = _cur(c)
+        cur.execute("SELECT DISTINCT provider FROM businesses WHERE active=1")
+        return [r["provider"] for r in _rows(cur)]
+
 def get_business(business_id, db=None):
     with conn(db) as c:
         cur = _cur(c)

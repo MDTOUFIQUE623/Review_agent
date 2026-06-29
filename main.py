@@ -22,6 +22,11 @@ PHONE_RE = re.compile(r"^\+\d{10,15}$")
 # ponytail: redis rate limiting client
 redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
 
+from collections import defaultdict
+import time
+
+_local_limiter = defaultdict(list)
+
 # ── Session & CSRF ────────────────────────────────────────────────────────────
 
 def _signer():
@@ -35,7 +40,8 @@ def set_session(response, username):
     csrf_token = secrets.token_hex(32)
     session_data = {"username": username, "csrf_token": csrf_token}
     token = _signer().dumps(session_data)
-    response.set_cookie("session", token, httponly=True, samesite="lax", max_age=60*60*8)
+    secure = os.getenv("BASE_URL", "").startswith("https")
+    response.set_cookie("session", token, httponly=True, samesite="lax", secure=secure, max_age=60*60*8)
 
 def get_session(request: Request):
     token = request.cookies.get("session")
@@ -65,11 +71,28 @@ async def verify_csrf(request: Request):
 
 @app.on_event("startup")
 def startup():
-    required = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM", "OPENAI_API_KEY", "SECRET_KEY"]
+    db.init()
+    
+    # Core required vars
+    required = ["OPENAI_API_KEY", "SECRET_KEY"]
+    
+    # Provider-aware dynamic required checks
+    try:
+        active_providers = db.get_active_providers()
+    except Exception:
+        active_providers = []
+        
+    if "twilio" in active_providers:
+        required.extend(["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM"])
+    if "meta" in active_providers:
+        required.extend(["META_ACCESS_TOKEN", "META_PHONE_NUMBER_ID"])
+    if "interakt" in active_providers:
+        required.extend(["INTERAKT_API_KEY"])
+        
     missing = [k for k in required if not os.getenv(k)]
     if missing:
-        raise RuntimeError(f"Missing required env vars: {missing}")
-    db.init()
+        raise RuntimeError(f"Missing required env vars for active providers: {missing}")
+        
     scheduler.start()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,8 +125,13 @@ def check_rate_limit(ip: str) -> bool:
             redis_client.expire(key, 60)
         return count <= 2
     except Exception as ex:
-        # ponytail: fallback to allowing request if Redis connection fails in prod
-        print(f"[limiter] Redis connection error: {ex}")
+        # ponytail: fallback to local memory rate limiter if Redis is offline
+        print(f"[limiter] Redis connection error: {ex}, falling back to local memory")
+        now = time.time()
+        _local_limiter[ip] = [t for t in _local_limiter[ip] if now - t < 60]
+        if len(_local_limiter[ip]) >= 2:
+            return False
+        _local_limiter[ip].append(now)
         return True
 
 def sanitize_input(text: str) -> str:
@@ -369,7 +397,7 @@ def dashboard(request: Request, business_id: int = None, _=Depends(require_auth)
 # ── Business lifecycle ────────────────────────────────────────────────────────
 
 @app.post("/businesses/{business_id}/deactivate")
-def deactivate_business(business_id: int, request: Request, _=Depends(require_auth)):
+def deactivate_business(business_id: int, request: Request, _=Depends(require_auth), __=Depends(verify_csrf)):
     biz = db.get_business(business_id)
     if not biz:
         raise HTTPException(status_code=404)
@@ -377,7 +405,7 @@ def deactivate_business(business_id: int, request: Request, _=Depends(require_au
     return RedirectResponse(url="/businesses", status_code=303)
 
 @app.post("/businesses/{business_id}/cancel-deactivation")
-def cancel_deactivation(business_id: int, request: Request, _=Depends(require_auth)):
+def cancel_deactivation(business_id: int, request: Request, _=Depends(require_auth), __=Depends(verify_csrf)):
     biz = db.get_business(business_id)
     if not biz:
         raise HTTPException(status_code=404)
