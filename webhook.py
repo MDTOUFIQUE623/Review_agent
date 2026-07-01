@@ -133,18 +133,20 @@ async def receive_reply(request: Request):
         # Meta Cloud API
         body = await request.json()
         
-        # ponytail: handle Meta status callbacks (delivered, read) first
+        # ponytail: handle Meta status callbacks (delivered, read)
         try:
             entry = body["entry"][0]
             change = entry["changes"][0]
             value = change["value"]
             if "statuses" in value:
-                status_obj = value["statuses"][0]
-                sid = status_obj["id"]
-                status = status_obj["status"]
-                db.update_status_by_sid(sid, status)
-                print(f"[webhook/meta] status update: {sid} -> {status}")
-                return JSONResponse({"status": "ok"})
+                for status_obj in value["statuses"]:
+                    sid = status_obj["id"]
+                    status = status_obj["status"]
+                    db.update_status_by_sid(sid, status)
+                    print(f"[webhook/meta] status update: {sid} -> {status}")
+                # Only return early if there are NO messages in this payload
+                if "messages" not in value:
+                    return JSONResponse({"status": "ok"})
         except (KeyError, IndexError):
             pass
 
